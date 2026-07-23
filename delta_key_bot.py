@@ -1,104 +1,161 @@
 import logging
-import os
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
-from telegram.constants import ParseMode
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import time
 
-# Включаем логирование
+# Логирование
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Ссылка на получение ключа Delta
-DELTA_KEY_URL = "https://auth.platorelay.com/a?d=3aXUTc4Msm0v59ga2Rr4q9i0lbY7fPCSscEMmndc6WpPuhK9DHdAseJ0WfUY1dVjSaedLVexSVCoablpkHy3Cj3cX2cJBTk5oKvZbAq1JwA59ST2TqvqR1Q58qqvRbrpJk4zSYbjgcfnWD6jgKHq2oYsFQYW57K6cG9K2msxG33sYrEDw5rUokE5fCu4S9kT7h8ESKLb9p5zlEGSzYC7sfd6u6j6wsh0kxx2j6vpPem9XP6QYlsRCCB3wVRXLppTudo4VeRO4vgaPEg7TaKzxORYSqyAWPhiG4qBV67QOHhhcgrTwjRtE3y0luizaDZNeGLDx77KOgVepYGduocdckvihVjnjecicRe8mq42yWpmDrOyoS77qAndrfiqkj4rK0zxxrQGOJ4IHtTafQxWJOYwvFS54kwJLuE5GuyxC5pfqyblxU1zUrK5tdHxbNE1dzaH3yZiK3BEfAvzgwUKi9iOaDTd6uOkABs"
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик команды /start"""
-    user = update.effective_user
-    
-    keyboard = [
-        [InlineKeyboardButton("🔑 Получить ключ Delta", url=DELTA_KEY_URL)],
-        [InlineKeyboardButton("ℹ️ О боте", callback_data='about')],
-    ]
+    """Начало работы"""
+    keyboard = [[InlineKeyboardButton("📖 Помощь", callback_data='help')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"👋 Привет, {user.first_name}!\n\n"
-        "🤖 Я помогу вам получить ключ Delta для PlatoRelay.\n\n"
-        "Нажмите кнопку ниже, чтобы получить доступ:",
+        "👋 Привет!\n\n"
+        "🔑 Отправьте мне ссылку для получения Delta ключа\n"
+        "Пример: `https://auth.platorelay.com/a?d=...`",
         reply_markup=reply_markup
     )
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик команды /help"""
-    keyboard = [
-        [InlineKeyboardButton("🔑 Получить ключ Delta", url=DELTA_KEY_URL)],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    help_text = (
-        "📖 <b>Команды бота:</b>\n\n"
-        "/start - Начать работу с ботом\n"
-        "/help - Справка\n"
-        "/key - Получить ссылку на ключ\n\n"
-        "Просто нажмите нужную кнопку или используйте команды!"
-    )
-    
-    await update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+def get_delta_key(url: str) -> str:
+    """Получить Delta ключ из ссылки"""
+    try:
+        # Используем headless браузер
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        
+        driver = webdriver.Chrome(options=options)
+        driver.get(url)
+        
+        # Ждём загрузки страницы
+        time.sleep(3)
+        
+        # Ищем кнопку для начала
+        try:
+            button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//button | //a[@role='button'] | //*[@class*='btn']"))
+            )
+            button.click()
+            time.sleep(2)
+        except:
+            logger.warning("Кнопка не найдена, продолжаем...")
+        
+        # Ждём загрузки требований
+        time.sleep(5)
+        
+        # Ищем ссылку на требования и открываем их
+        try:
+            requirements = driver.find_elements(By.TAG_NAME, "a")
+            for req in requirements:
+                try:
+                    req.click()
+                    time.sleep(2)
+                    # Переходим на новую вкладку если открылась
+                    if len(driver.window_handles) > 1:
+                        driver.switch_to.window(driver.window_handles[-1])
+                        time.sleep(3)
+                        driver.close()
+                        driver.switch_to.window(driver.window_handles[0])
+                except:
+                    pass
+        except:
+            pass
+        
+        time.sleep(3)
+        
+        # Получаем весь текст со страницы
+        page_text = driver.page_source
+        
+        # Ищем ключ в странице
+        if 'delta' in page_text.lower():
+            # Пытаемся найти ключ в различных форматах
+            import re
+            
+            # Ищем паттерны ключей
+            patterns = [
+                r'delta[_-]?key["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_-]+)["\']?',
+                r'key["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_-]{20,})["\']?',
+                r'["\']?([a-zA-Z0-9_-]{32,})["\']?',  # 32+ символов - похоже на ключ
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, page_text, re.IGNORECASE)
+                if match:
+                    key = match.group(1)
+                    if len(key) > 10:
+                        driver.quit()
+                        return key
+        
+        # Если ключ не найден в исходном коде, ищем на странице
+        try:
+            key_element = driver.find_element(By.XPATH, "//*[contains(text(), 'key')] | //*[contains(text(), 'Key')]")
+            key_text = key_element.text
+            driver.quit()
+            return key_text.split(":")[-1].strip() if ":" in key_text else key_text
+        except:
+            pass
+        
+        driver.quit()
+        return None
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении ключа: {e}")
+        return None
 
-async def get_key(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик команды /key"""
-    keyboard = [
-        [InlineKeyboardButton("🔑 Получить ключ Delta", url=DELTA_KEY_URL)],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка URL-адреса"""
+    url = update.message.text.strip()
     
-    await update.message.reply_text(
-        "🔐 Ваша ссылка для получения ключа Delta готова!\n\n"
-        "Нажмите на кнопку ниже:",
-        reply_markup=reply_markup
-    )
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик нажатий кнопок"""
-    query = update.callback_query
-    await query.answer()
+    # Проверяем, является ли это ссылкой
+    if not (url.startswith('http://') or url.startswith('https://')):
+        await update.message.reply_text("❌ Пожалуйста, отправьте корректную ссылку (начинающуюся с http:// или https://)")
+        return
     
-    if query.data == 'about':
-        keyboard = [
-            [InlineKeyboardButton("🔑 Получить ключ Delta", url=DELTA_KEY_URL)],
-            [InlineKeyboardButton("⬅️ Назад", callback_data='back')],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        about_text = (
-            "ℹ️ <b>О боте</b>\n\n"
-            "Этот бот помогает вам легко получить ключ Delta для платформы PlatoRelay.\n\n"
-            "✨ <b>Возможности:</b>\n"
-            "• Быстрое получение ключей\n"
-            "• Удобный интерфейс\n"
-            "• Поддержка в любое время\n\n"
-            "Версия: 1.0"
-        )
-        
-        await query.edit_message_text(
-            about_text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML
-        )
+    # Отправляем сообщение о обработке
+    processing_msg = await update.message.reply_text("⏳ Получаю ключ Delta... Это может занять 10-15 секунд...")
     
-    elif query.data == 'back':
-        keyboard = [
-            [InlineKeyboardButton("🔑 Получить ключ Delta", url=DELTA_KEY_URL)],
-            [InlineKeyboardButton("ℹ️ О боте", callback_data='about')],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    try:
+        # Получаем ключ в отдельном потоке (чтобы не блокировать бота)
+        loop = asyncio.get_event_loop()
+        key = await loop.run_in_executor(None, get_delta_key, url)
         
-        await query.edit_message_text(
-            "👋 Выберите действие:",
-            reply_markup=reply_markup
+        if key:
+            await processing_msg.edit_text(
+                f"✅ Ключ успешно получен!\n\n"
+                f"🔑 <b>Delta Key:</b>\n"
+                f"<code>{key}</code>\n\n"
+                f"Скопируйте ключ выше ☝️",
+                parse_mode="HTML"
+            )
+        else:
+            await processing_msg.edit_text(
+                "❌ Не удалось получить ключ.\n\n"
+                "Возможные причины:\n"
+                "• Некорректная ссылка\n"
+                "• Проблема с интернетом\n"
+                "• Сервис недоступен\n\n"
+                "Попробуйте снова или отправьте другую ссылку."
+            )
+    except Exception as e:
+        logger.error(f"Ошибка: {e}")
+        await processing_msg.edit_text(
+            f"❌ Ошибка при обработке:\n{str(e)}\n\n"
+            "Попробуйте снова."
         )
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -106,37 +163,22 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.error(f"Update {update} caused error {context.error}")
 
 def main() -> None:
-    """Запуск бота с улучшенной обработкой ошибок"""
+    """Запуск бота"""
     TOKEN = "8671124050:AAFtOokVpRahQg7rRSi7TFWCNrnsYCgw024"
     
     application = Application.builder().token(TOKEN).build()
 
-    # Регистрируем обработчики команд
+    # Обработчики
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("key", get_key))
-    
-    # Регистрируем обработчик кнопок
-    application.add_handler(CallbackQueryHandler(button_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
     
     # Обработчик ошибок
     application.add_error_handler(error_handler)
 
     print("🚀 Бот запущен!")
-    print("⏳ Подключение к Telegram API...")
+    print("⏳ Ожидание сообщений...")
     
-    try:
-        application.run_polling(
-            allowed_updates=["message", "callback_query"],
-            timeout=30,
-            read_timeout=30,
-            write_timeout=30,
-            connect_timeout=30,
-            pool_timeout=30
-        )
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
-        print("Проверьте интернет и токен!")
+    application.run_polling(allowed_updates=["message", "callback_query"])
 
 if __name__ == '__main__':
     main()
