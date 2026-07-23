@@ -106,8 +106,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main() -> None:
     """Запуск бота"""
-    # Замените на ваш токен от BotFather
-    TOKEN = "YOUR_BOT_TOKEN_HERE"
+    # Токен бота
+    TOKEN = "8671124050:AAFtOokVpRahQg7rRSi7TFWCNrnsYCgw024"
     
     # Создаем приложение
     application = Application.builder().token(TOKEN).build()
