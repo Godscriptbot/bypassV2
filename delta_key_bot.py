@@ -17,14 +17,12 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Начало работы"""
-    keyboard = [[InlineKeyboardButton("📖 Помощь", callback_data='help')]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
     await update.message.reply_text(
         "👋 Привет!\n\n"
-        "🔑 Отправьте мне ссылку для получения Delta ключа\n"
-        "Пример: `https://auth.platorelay.com/a?d=...`",
-        reply_markup=reply_markup
+        "🔑 Отправьте мне ссылку для получения Delta ключа\n\n"
+        "Пример:\n"
+        "`https://auth.platorelay.com/a?d=...`\n\n"
+        "Бот автоматически пройдёт требования и выдаст вам ключ! ⚡"
     )
 
 def get_delta_key(url: str) -> str:
