@@ -1,6 +1,8 @@
 import logging
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.constants import ParseMode
 
 # Включаем логирование
 logging.basicConfig(
@@ -16,7 +18,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /start"""
     user = update.effective_user
     
-    # Создаем клавиатуру с кнопкой
     keyboard = [
         [InlineKeyboardButton("🔑 Получить ключ Delta", url=DELTA_KEY_URL)],
         [InlineKeyboardButton("ℹ️ О боте", callback_data='about')],
@@ -45,7 +46,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Просто нажмите нужную кнопку или используйте команды!"
     )
     
-    await update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='HTML')
+    await update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
 async def get_key(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /key"""
@@ -85,7 +86,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text(
             about_text,
             reply_markup=reply_markup,
-            parse_mode='HTML'
+            parse_mode=ParseMode.HTML
         )
     
     elif query.data == 'back':
@@ -105,11 +106,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.error(f"Update {update} caused error {context.error}")
 
 def main() -> None:
-    """Запуск бота"""
-    # Токен бота
+    """Запуск бота с улучшенной обработкой ошибок"""
     TOKEN = "8671124050:AAFtOokVpRahQg7rRSi7TFWCNrnsYCgw024"
     
-    # Создаем приложение
     application = Application.builder().token(TOKEN).build()
 
     # Регистрируем обработчики команд
@@ -123,9 +122,21 @@ def main() -> None:
     # Обработчик ошибок
     application.add_error_handler(error_handler)
 
-    # Запускаем бота
     print("🚀 Бот запущен!")
-    application.run_polling()
+    print("⏳ Подключение к Telegram API...")
+    
+    try:
+        application.run_polling(
+            allowed_updates=["message", "callback_query"],
+            timeout=30,
+            read_timeout=30,
+            write_timeout=30,
+            connect_timeout=30,
+            pool_timeout=30
+        )
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        print("Проверьте интернет и токен!")
 
 if __name__ == '__main__':
     main()
